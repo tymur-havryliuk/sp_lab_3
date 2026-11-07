@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C Compiler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <label class="select-wrap" title="Програма">
+    <svg class="ico"><use href="#i-file"/></svg>
+    <select id="examples"></select>
+    <svg class="ico chevron"><use href="#i-chevron"/></svg>
+  </label>
+  <button class="btn primary" id="compile">
+    <svg class="ico"><use href="#i-play"/></svg>
+    <span>Запустити</span>
+  </button>
+  <div class="steps" id="steps">
+    <span class="step" data-stage="lexer"><i></i>Лексер<span class="step-metric"></span></span>
+    <span class="step-sep"></span>
+    <span class="step" data-stage="parser"><i></i>Парсер<span class="step-metric"></span></span>
+    <span class="step-sep"></span>
+    <span class="step" data-stage="semantic"><i></i>Семантика<span class="step-metric"></span></span>
+    <span class="step-sep"></span>
+    <span class="step" data-stage="interpreter"><i></i>Інтерпретатор<span class="step-metric"></span></span>
+    <span class="step-sep"></span>
+    <span class="step" data-stage="codegen"><i></i>Python<span class="step-metric"></span></span>
+  </div>
+</header>
+
+<main class="workspace" id="workspace">
+
+  <section class="panel" id="panel-editor">
+    <div class="panel-head">
+      <div class="file-tab"><svg class="ico"><use href="#i-braces"/></svg><span id="file-name">main.c</span><span class="dirty" id="dirty" hidden></span></div>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" id="reset" title="Повернути вихідний текст прикладу"><svg class="ico"><use href="#i-undo"/></svg>Скинути</button>
+    </div>
+    <div class="editor-host" id="editor"></div>
+  </section>
+
+  <section class="panel" id="panel-ast">
+    <div class="panel-head">
+      <div class="panel-title" title="Абстрактне синтаксичне дерево">Дерево AST <span class="badge" id="node-count">0</span></div>
+      <div class="spacer"></div>
+      <div class="search">
+        <svg class="ico"><use href="#i-search"/></svg>
+        <input id="ast-search" placeholder="Пошук вузла…" autocomplete="off">
+        <span class="search-count" id="search-count"></span>
+      </div>
+      <div class="btn-group">
+        <button class="btn ghost icon sm" id="ast-expand" title="Розгорнути все"><svg class="ico"><use href="#i-expand"/></svg></button>
+        <button class="btn ghost icon sm" id="ast-collapse" title="Згорнути до функцій"><svg class="ico"><use href="#i-collapse"/></svg></button>
+        <button class="btn ghost icon sm" id="ast-fit" title="Вмістити в екран"><svg class="ico"><use href="#i-fit"/></svg></button>
+      </div>
+      <button class="btn ghost icon sm" id="ast-hide" title="Сховати панель"><svg class="ico"><use href="#i-panel"/></svg></button>
+    </div>
+    <div class="tree-host" id="tree">
+      <div class="empty-state" id="tree-empty">
+        <svg class="ico xl"><use href="#i-tree"/></svg>
+        <div>Дерево з'явиться після компіляції</div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-side">
+    <div class="tabs" role="tablist" id="tabs">
+      <button class="tab active" data-tab="output"><svg class="ico"><use href="#i-terminal"/></svg>Вивід</button>
+      <button class="tab" data-tab="python"><svg class="ico"><use href="#i-code"/></svg>Python</button>
+      <button class="tab" data-tab="tokens"><svg class="ico"><use href="#i-scissors"/></svg>Токени</button>
+      <button class="tab" data-tab="diag"><svg class="ico"><use href="#i-alert"/></svg>Діагностика<span class="tab-badge" id="diag-badge" hidden></span></button>
+      <button class="tab" data-tab="grammar"><svg class="ico"><use href="#i-book"/></svg>Граматика</button>
+    </div>
+
+    <div class="tab-page active" id="page-output"></div>
+
+    <div class="tab-page" id="page-python">
+      <div class="page-toolbar">
+        <span class="muted">Програма, транслятована з C</span>
+        <div class="spacer"></div>
+        <button class="btn ghost icon sm" id="python-copy" title="Копіювати"><svg class="ico"><use href="#i-copy"/></svg></button>
+        <button class="btn ghost icon sm" id="python-download" title="Завантажити .py"><svg class="ico"><use href="#i-download"/></svg></button>
+      </div>
+      <div class="code-host" id="python-viewer"></div>
+    </div>
+
+    <div class="tab-page" id="page-tokens">
+      <div class="page-toolbar" id="token-filters"></div>
+      <div class="scroll" id="token-list"></div>
+    </div>
+
+    <div class="tab-page" id="page-diag"><div class="scroll" id="diag-list"></div></div>
+
+    <div class="tab-page" id="page-grammar"><div class="scroll" id="grammar"></div></div>
+  </section>
+</main>
+
+
+<div class="toast" id="toast"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></g></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-scissors" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></g></symbol>
+    <symbol id="i-tree" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="5" rx="1.2"/><rect x="2.5" y="16.5" width="6" height="5" rx="1.2"/><rect x="15.5" y="16.5" width="6" height="5" rx="1.2"/><path d="M12 7.5V12M5.5 16.5V12h13v4.5"/></g></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></g></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></g></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-braces" viewBox="0 0 24 24"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></g></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M7 15l5 5 5-5M7 9l5-5 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M7 20l5-5 5 5M7 4l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 4v16" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12.5 15H17"/></g></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></g></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h14v15H6a2 2 0 0 0-2 2 2 2 0 0 0 2 2h14"/></g></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></g></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></g></symbol>
+  </defs>
+</svg>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
